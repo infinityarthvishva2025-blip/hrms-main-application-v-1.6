@@ -19,6 +19,7 @@ const PayrollDashboard = () => {
     const currMonth = today.getMonth();
     const currYear = today.getFullYear();
     
+    // Default to a standard 21-20 cycle
     const start = new Date(currYear, currMonth - 1, 21);
     const end = new Date(currYear, currMonth, 20);
     
@@ -38,9 +39,10 @@ const PayrollDashboard = () => {
     endDate: dateRange.endDate 
   });
   const [employees, setEmployees] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [detailsData, setDetailsData] = useState({ title: '', records: [] });
+  const [selectedPayroll, setSelectedPayroll] = useState(null);
 
   const fetchPayrolls = useCallback(async () => {
     setLoading(true);
@@ -58,8 +60,8 @@ const PayrollDashboard = () => {
 
   const fetchEmployees = useCallback(async () => {
     try {
-      const { data } = await api.get('/employees');
-      // The API returns { employees: [...], total: ... } inside data.data
+      // Fetch all active employees (limit 1000 to ensure we get all 48+)
+      const { data } = await api.get('/employees?limit=1000&status=Active');
       const empList = data.data?.employees || (Array.isArray(data.data) ? data.data : []);
       setEmployees(empList);
     } catch (err) {
@@ -77,14 +79,10 @@ const PayrollDashboard = () => {
     if (!genForm.employeeId || !genForm.startDate || !genForm.endDate) {
       return toast.error('Please fill all fields');
     }
-    if (new Date(genForm.startDate) > new Date(genForm.endDate)) {
-      return toast.error('Start date cannot be after end date');
-    }
-
     setActionLoading(true);
     try {
       await api.post('/payroll/generate', genForm);
-      toast.success('Payroll generated successfully');
+      toast.success('Payroll generated');
       setShowGenerateModal(false);
       fetchPayrolls();
     } catch (err) {
@@ -95,47 +93,21 @@ const PayrollDashboard = () => {
   };
 
   const handleProcessAll = async () => {
-    if (!window.confirm(`Are you sure you want to process payroll for all active employees for the period ${formatDate(dateRange.startDate)} to ${formatDate(dateRange.endDate)}?`)) return;
+    if (!window.confirm(`Process payroll for ALL active employees (${employees.length}) for ${formatDate(dateRange.startDate)} to ${formatDate(dateRange.endDate)}?`)) return;
     
     setActionLoading(true);
     try {
-      await api.post('/payroll/generate-all', { 
+      const { data } = await api.post('/payroll/generate-all', { 
         startDate: dateRange.startDate, 
         endDate: dateRange.endDate 
       });
-      toast.success('Bulk payroll processing completed');
+      toast.success(`Broadcasting update: ${data.message}`);
       fetchPayrolls();
     } catch (err) {
       toast.error('Bulk generation failed');
     } finally {
       setActionLoading(false);
     }
-  };
-
-  const handleExportExcel = () => {
-    if (payrolls.length === 0) {
-      return toast.error('No payroll data to export');
-    }
-    const excelData = payrolls.map(p => ({
-      'Emp Code': p.employeeCode,
-      'Name': p.employeeName,
-      'Working Days': p.totalDaysInMonth,
-      'Half Days': p.halfDays,
-      'Absent Days': p.absentDays,
-      'Paid Days': p.paidDays,
-      'Basic Salary': p.baseSalary,
-      'Gross Salary': p.grossEarnings,
-      'Deduction': p.professionalTax, // add other deductions if any
-      'Net Salary': p.netSalary,
-      'Bank Name': p.employeeId?.bankName || 'N/A',
-      'Account No': p.employeeId?.accountNumber || 'N/A',
-      'IFSC Code': p.employeeId?.ifsc || 'N/A'
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(excelData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'PayrollData');
-    XLSX.writeFile(wb, `Payroll_Export_${dateRange.startDate}_${dateRange.endDate}.xlsx`);
   };
 
   const downloadSlip = async (id, name) => {
@@ -149,234 +121,214 @@ const PayrollDashboard = () => {
       link.click();
       link.remove();
     } catch (err) {
-      toast.error('Failed to download slip');
+      toast.error('Download failed');
     }
   };
 
-  const formatDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+  const filteredEmployees = employees.filter(emp => 
+    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    emp.employeeCode.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const formatDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
     <AppShell>
-      <div className="page-wrapper fade-in" style={{ padding: '32px' }}>
-        <header style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="page-wrapper fade-in" style={{ padding: '32px', maxWidth: '1600px', margin: '0 auto' }}>
+        <header style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '20px' }}>
           <div>
-            <h1 style={{ fontSize: '2.4rem', fontWeight: 900, letterSpacing: '-0.03em' }}>Payroll Management</h1>
-            <p style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>Cycle-based salary processing (21st - 20th)</p>
+            <h1 style={{ fontSize: '2.8rem', fontWeight: 900, letterSpacing: '-0.04em', background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Payroll Engine</h1>
+            <p style={{ color: 'var(--color-text-secondary)', fontWeight: 600, fontSize: '1.1rem' }}>Manage accurate salary processing for {employees.length} active employees</p>
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleExportExcel}
-              className="btn-secondary"
-              style={{ padding: '12px 24px', borderRadius: '16px', gap: '8px' }}
-            >
-              <FileText size={20} /> Export Excel
+            <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} onClick={handleProcessAll} className="btn-primary" style={{ padding: '14px 28px', borderRadius: '18px', background: 'linear-gradient(135deg, #6366f1, #a855f7)', boxShadow: '0 10px 20px -5px rgba(99, 102, 241, 0.4)', border: 'none', color: '#fff', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px' }} disabled={actionLoading}>
+              {actionLoading ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle2 size={20} />} 
+              Process All Active
             </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={handleProcessAll}
-              className="btn-primary"
-              style={{ padding: '12px 24px', borderRadius: '16px', gap: '8px', background: 'linear-gradient(135deg, #4F46E5, #7C3AED)' }}
-              disabled={actionLoading}
-            >
-              {actionLoading ? <Loader2 className="animate-spin" size={20} /> : <CheckCircle size={20} />} Process All
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                setGenForm({ ...genForm, startDate: dateRange.startDate, endDate: dateRange.endDate });
-                setShowGenerateModal(true);
-              }}
-              className="btn-secondary"
-              style={{ padding: '12px 24px', borderRadius: '16px', gap: '8px' }}
-            >
+            <motion.button whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }} onClick={() => setShowGenerateModal(true)} className="btn-secondary" style={{ padding: '14px 28px', borderRadius: '18px', fontWeight: 700, border: '1px solid #e2e8f0' }}>
               <Plus size={20} /> Process Single
             </motion.button>
           </div>
         </header>
 
-        {/* Filters */}
-        <div className="card" style={{ padding: '20px', marginBottom: '24px', display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Calendar size={18} color="var(--color-accent)" />
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <input 
-                type="date" 
-                className="input-field" 
-                value={dateRange.startDate} 
-                onChange={e => setDateRange({...dateRange, startDate: e.target.value})} 
-                style={{ width: '160px' }}
-              />
-              <ArrowRight size={16} color="var(--color-text-tertiary)" />
-              <input 
-                type="date" 
-                className="input-field" 
-                value={dateRange.endDate} 
-                onChange={e => setDateRange({...dateRange, endDate: e.target.value})}
-                style={{ width: '160px' }}
-              />
-            </div>
+        {/* Dynamic Controls */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '24px', marginBottom: '32px', alignItems: 'center' }}>
+          <div className="card" style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: '16px', borderRadius: '20px', background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.5)' }}>
+            <Search size={20} color="#94a3b8" />
+            <input 
+              type="text" 
+              placeholder="Search by name or employee code..." 
+              style={{ border: 'none', background: 'transparent', width: '100%', padding: '12px 0', fontSize: '1rem', outline: 'none', fontWeight: 500 }}
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
           </div>
-          <button onClick={fetchPayrolls} className="btn-secondary" style={{ padding: '8px 20px', borderRadius: '12px' }}>Filter</button>
+          <div className="card" style={{ padding: '10px 24px', display: 'flex', alignItems: 'center', gap: '20px', borderRadius: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <Calendar size={18} color="#6366f1" />
+              <input type="date" className="input-field" value={dateRange.startDate} onChange={e => setDateRange({...dateRange, startDate: e.target.value})} style={{ width: '150px', border: 'none', background: 'transparent', fontWeight: 700 }} />
+              <ArrowRight size={16} color="#cbd5e1" />
+              <input type="date" className="input-field" value={dateRange.endDate} onChange={e => setDateRange({...dateRange, endDate: e.target.value})} style={{ width: '150px', border: 'none', background: 'transparent', fontWeight: 700 }} />
+            </div>
+            <button onClick={fetchPayrolls} className="btn-primary" style={{ padding: '8px 24px', borderRadius: '12px' }}>Refresh</button>
+          </div>
         </div>
 
-        {/* Table */}
-        <div className="card" style={{ overflow: 'hidden' }}>
+        {/* Table Section */}
+        <div className="card" style={{ borderRadius: '24px', overflow: 'hidden', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)' }}>
           {loading ? (
-            <div style={{ padding: '60px', textAlign: 'center' }}><Loader2 className="animate-spin" size={40} color="var(--color-accent)" /></div>
+            <div style={{ padding: '100px', textAlign: 'center' }}><Loader2 className="animate-spin" size={48} color="#6366f1" /></div>
           ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Period</th>
-                  <th>Paid Days</th>
-                  <th>Absents</th>
-                  <th>Half Days</th>
-                  <th>Gross Salary</th>
-                  <th>PT</th>
-                  <th>Net Payable</th>
-                  <th>Slip</th>
-                </tr>
-              </thead>
-              <tbody>
-                {!Array.isArray(employees) || employees.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} style={{ textAlign: 'center', padding: '60px' }}>
-                      <div style={{ opacity: 0.5, marginBottom: '12px' }}><Search size={48} style={{ margin: '0 auto' }} /></div>
-                      <div style={{ fontWeight: 800, fontSize: '1.2rem', color: 'var(--color-text-secondary)' }}>No employees found</div>
-                    </td>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0' }}>
+                <thead>
+                  <tr style={{ background: '#f8fafc' }}>
+                    <th style={{ padding: '20px 24px', textAlign: 'left', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Employee</th>
+                    <th style={{ padding: '20px 24px', textAlign: 'left', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Working Days</th>
+                    <th style={{ padding: '20px 24px', textAlign: 'left', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>H / A / P</th>
+                    <th style={{ padding: '20px 24px', textAlign: 'left', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Basic Salary</th>
+                    <th style={{ padding: '20px 24px', textAlign: 'left', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Gross Salary</th>
+                    <th style={{ padding: '20px 24px', textAlign: 'left', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Deduction (PT)</th>
+                    <th style={{ padding: '20px 24px', textAlign: 'left', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Net Salary</th>
+                    <th style={{ padding: '20px 24px', textAlign: 'center', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b' }}>Actions</th>
                   </tr>
-                ) : employees.map(emp => {
-                  const p = payrolls.find(pay => pay.employeeId === emp._id || pay.employeeId?._id === emp._id);
-                  const isProcessed = !!p;
+                </thead>
+                <tbody>
+                  {filteredEmployees.map(emp => {
+                    const p = payrolls.find(pay => pay.employeeId === emp._id || pay.employeeId?._id === emp._id);
+                    const isProcessed = !!p;
 
-                  return (
-                    <tr key={emp._id} style={{ opacity: isProcessed ? 1 : 0.7 }}>
-                      <td>
-                        <div style={{ fontWeight: 800 }}>{emp.name}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-tertiary)' }}>{emp.employeeCode}</div>
-                      </td>
-                      <td style={{ fontSize: '0.85rem', fontWeight: 600 }}>
-                        {isProcessed ? (
-                          `${formatDate(p.fromDate)} - ${formatDate(p.toDate)}`
-                        ) : (
-                          <span style={{ color: 'var(--color-text-tertiary)' }}>{formatDate(dateRange.startDate)} - {formatDate(dateRange.endDate)}</span>
-                        )}
-                      </td>
-                      <td style={{ fontWeight: 700 }}>
-                        {isProcessed ? `${p.paidDays} / ${p.totalDaysInMonth}` : '-'}
-                      </td>
-                      <td>
-                        {isProcessed ? (
-                          <button 
-                            onClick={() => {
-                              setDetailsData({ title: `Absents for ${emp.name}`, records: p.absentDayDetails || [] });
-                              setShowDetailsModal(true);
-                            }}
-                            style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', border: 'none', padding: '4px 12px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer' }}
-                          >
-                            {p.absentDays}
-                          </button>
-                        ) : '-'}
-                      </td>
-                      <td>
-                        {isProcessed ? (
-                          <button 
-                            onClick={() => {
-                              setDetailsData({ title: `Half Days for ${emp.name}`, records: p.halfDayDetails || [] });
-                              setShowDetailsModal(true);
-                            }}
-                            style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B', border: 'none', padding: '4px 12px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer' }}
-                          >
-                            {p.halfDays}
-                          </button>
-                        ) : '-'}
-                      </td>
-                      <td>{isProcessed ? `₹${p.grossEarnings.toLocaleString()}` : '-'}</td>
-                      <td style={{ color: '#EF4444' }}>{isProcessed ? `₹${p.professionalTax}` : '-'}</td>
-                      <td style={{ fontWeight: 900, color: isProcessed ? 'var(--color-accent)' : 'var(--color-text-tertiary)', fontSize: '1rem' }}>
-                        {isProcessed ? `₹${p.netSalary.toLocaleString()}` : 'Not Generated'}
-                      </td>
-                      <td>
-                        {isProcessed ? (
-                          <button onClick={() => downloadSlip(p._id, emp.name)} className="btn-icon" title="Download Slip">
-                            <Download size={18} />
-                          </button>
-                        ) : (
-                          <button 
-                            onClick={() => {
-                              setGenForm({ employeeId: emp._id, startDate: dateRange.startDate, endDate: dateRange.endDate });
-                              setShowGenerateModal(true);
-                            }}
-                            className="btn-icon" 
-                            style={{ color: 'var(--color-accent)' }}
-                            title="Generate Now"
-                          >
-                            <Plus size={18} />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    return (
+                      <tr key={emp._id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.2s' }} className="hover-row">
+                        <td style={{ padding: '20px 24px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'linear-gradient(135deg, #e0e7ff, #f5f3ff)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: '#6366f1' }}>
+                              {emp.name.charAt(0)}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 800, color: '#1e293b' }}>{emp.name}</div>
+                              <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600 }}>{emp.employeeCode}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '20px 24px' }}>
+                           <div style={{ fontWeight: 700, color: '#334155' }}>{isProcessed ? p.totalDaysInMonth : '-'} Days</div>
+                        </td>
+                        <td style={{ padding: '20px 24px' }}>
+                          {isProcessed ? (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button 
+                                onClick={() => { 
+                                  setSelectedPayroll({...p, detailType: 'Half Days', details: p.halfDayDetails || [] }); 
+                                  setShowDetailsModal(true); 
+                                }}
+                                title="Click to view Half Days" 
+                                style={{ background: '#fffbeb', color: '#b45309', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: 'pointer' }}
+                              >
+                                {p.halfDays}H
+                              </button>
+                              <button 
+                                onClick={() => { 
+                                  setSelectedPayroll({...p, detailType: 'Absent Days', details: p.absentDayDetails || [] }); 
+                                  setShowDetailsModal(true); 
+                                }}
+                                title="Click to view Absents" 
+                                style={{ background: '#fef2f2', color: '#b91c1c', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, border: 'none', cursor: 'pointer' }}
+                              >
+                                {p.absentDays}A
+                              </button>
+                              <span title="Paid Days" style={{ background: '#f0fdf4', color: '#15803d', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700 }}>
+                                {p.paidDays}P
+                              </span>
+                            </div>
+                          ) : '-'}
+                        </td>
+                        <td style={{ padding: '20px 24px', fontWeight: 600, color: '#475569' }}>
+                          ₹{emp.salary?.toLocaleString() || '0'}
+                        </td>
+                        <td style={{ padding: '20px 24px', fontWeight: 600, color: '#475569' }}>
+                          {isProcessed ? `₹${p.grossEarnings.toLocaleString()}` : '-'}
+                        </td>
+                        <td style={{ padding: '20px 24px', color: '#ef4444', fontWeight: 600 }}>
+                          {isProcessed ? `-₹${p.professionalTax}` : '-'}
+                        </td>
+                        <td style={{ padding: '20px 24px' }}>
+                          {isProcessed ? (
+                            <div style={{ fontWeight: 900, fontSize: '1.1rem', color: '#10b981' }}>₹{p.netSalary.toLocaleString()}</div>
+                          ) : (
+                            <span style={{ fontSize: '0.8rem', color: '#cbd5e1', fontWeight: 600 }}>Pending</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '20px 24px', textAlign: 'center' }}>
+                          <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            {isProcessed ? (
+                              <>
+                                <motion.button 
+                                  whileHover={{ scale: 1.1 }} 
+                                  whileTap={{ scale: 0.9 }} 
+                                  onClick={(e) => { 
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setSelectedPayroll({ ...p, detailType: null }); 
+                                    setShowDetailsModal(true); 
+                                  }} 
+                                  className="btn-icon" 
+                                  style={{ color: '#6366f1', background: '#f5f3ff', border: 'none', cursor: 'pointer' }}
+                                >
+                                  <FileText size={18} />
+                                </motion.button>
+                                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => downloadSlip(p._id, emp.name)} className="btn-icon" style={{ color: '#10b981', background: '#f0fdf4' }}>
+                                  <Download size={18} />
+                                </motion.button>
+                              </>
+                            ) : (
+                              <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => { setGenForm({ employeeId: emp._id, startDate: dateRange.startDate, endDate: dateRange.endDate }); setShowGenerateModal(true); }} className="btn-icon" style={{ color: '#6366f1', background: '#f5f3ff' }}>
+                                <Plus size={18} />
+                              </motion.button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
         {/* Generate Modal */}
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {showGenerateModal && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowGenerateModal(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(8px)' }} />
-              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} style={{ position: 'relative', background: '#fff', borderRadius: '32px', width: '100%', maxWidth: '440px', padding: '32px' }}>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 900, marginBottom: '24px' }}>Process Payroll</h2>
-                <form onSubmit={handleGenerate} style={{ display: 'grid', gap: '20px' }}>
-                  <div>
-                    <label className="form-label">Employee</label>
-                    <select className="input-field" required value={genForm.employeeId} onChange={e => setGenForm({...genForm, employeeId: e.target.value})}>
-                      <option value="">Select Employee</option>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowGenerateModal(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)' }} />
+              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} style={{ position: 'relative', background: '#fff', borderRadius: '32px', width: '100%', maxWidth: '480px', padding: '40px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+                <h2 style={{ fontSize: '1.8rem', fontWeight: 900, marginBottom: '8px' }}>Process Payroll</h2>
+                <p style={{ color: '#64748b', marginBottom: '32px', fontWeight: 500 }}>Generate salary for a specific employee</p>
+                
+                <form onSubmit={handleGenerate} style={{ display: 'grid', gap: '24px' }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, marginBottom: '8px', display: 'block' }}>Select Employee</label>
+                    <select className="input-field" required value={genForm.employeeId} onChange={e => setGenForm({...genForm, employeeId: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                      <option value="">Choose an employee...</option>
                       {employees.map(e => <option key={e._id} value={e._id}>{e.name} ({e.employeeCode})</option>)}
                     </select>
                   </div>
                   
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <div>
-                      <label className="form-label">Start Date</label>
-                      <input 
-                        type="date" 
-                        className="input-field" 
-                        value={genForm.startDate} 
-                        onChange={e => setGenForm({...genForm, startDate: e.target.value})} 
-                      />
+                      <label className="form-label" style={{ fontWeight: 700, marginBottom: '8px', display: 'block' }}>From</label>
+                      <input type="date" className="input-field" value={genForm.startDate} onChange={e => setGenForm({...genForm, startDate: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }} />
                     </div>
                     <div>
-                      <label className="form-label">End Date</label>
-                      <input 
-                        type="date" 
-                        className="input-field" 
-                        value={genForm.endDate} 
-                        onChange={e => setGenForm({...genForm, endDate: e.target.value})} 
-                      />
+                      <label className="form-label" style={{ fontWeight: 700, marginBottom: '8px', display: 'block' }}>To</label>
+                      <input type="date" className="input-field" value={genForm.endDate} onChange={e => setGenForm({...genForm, endDate: e.target.value})} style={{ width: '100%', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0' }} />
                     </div>
                   </div>
 
-                  <div style={{ padding: '16px', background: 'rgba(59,130,246,0.05)', borderRadius: '16px', border: '1px solid rgba(59,130,246,0.1)' }}>
-                    <div style={{ display: 'flex', gap: '10px', fontSize: '0.85rem', color: 'var(--color-accent)', fontWeight: 600, lineHeight: '1.4' }}>
-                      <AlertCircle size={18} style={{ flexShrink: 0 }} />
-                      <div>
-                        Paid days will be calculated based on attendance from {formatDate(genForm.startDate)} to {formatDate(genForm.endDate)}.
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-                    <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowGenerateModal(false)}>Cancel</button>
-                    <button type="submit" className="btn-primary" style={{ flex: 2 }} disabled={actionLoading}>
+                  <div style={{ display: 'flex', gap: '16px', marginTop: '16px' }}>
+                    <button type="button" className="btn-secondary" style={{ flex: 1, padding: '14px', borderRadius: '14px' }} onClick={() => setShowGenerateModal(false)}>Cancel</button>
+                    <button type="submit" className="btn-primary" style={{ flex: 2, padding: '14px', borderRadius: '14px', background: '#6366f1' }} disabled={actionLoading}>
                       {actionLoading ? <Loader2 className="animate-spin" size={20} /> : 'Process Now'}
                     </button>
                   </div>
@@ -386,36 +338,91 @@ const PayrollDashboard = () => {
           )}
         </AnimatePresence>
 
-        {/* Details Modal (For Absents and Half Days) */}
-        <AnimatePresence>
-          {showDetailsModal && (
-            <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDetailsModal(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(4px)' }} />
-              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} style={{ position: 'relative', background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '400px', padding: '24px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '16px', color: 'var(--color-text)' }}>{detailsData.title}</h3>
-                
-                <div style={{ overflowY: 'auto', flex: 1, paddingRight: '10px' }}>
-                  {detailsData.records.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {detailsData.records.map((r, i) => (
-                        <div key={i} style={{ padding: '12px', background: 'var(--color-surface-alt)', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-accent)' }}>
-                            {formatDate(r.date)}
-                          </span>
-                          <span style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', background: '#fff', padding: '4px 8px', borderRadius: '8px', fontWeight: 600 }}>
-                            {r.reason || 'No Reason Provided'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--color-text-tertiary)' }}>
-                      No records found
-                    </div>
-                  )}
+        {/* Details Modal */}
+        <AnimatePresence mode="wait">
+          {showDetailsModal && selectedPayroll && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDetailsModal(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(8px)' }} />
+              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} style={{ position: 'relative', background: '#fff', borderRadius: '32px', width: '100%', maxWidth: '600px', padding: '40px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '1.8rem', fontWeight: 900 }}>{selectedPayroll.detailType || 'Salary Details'}</h2>
+                    <p style={{ color: '#64748b', fontWeight: 600 }}>{selectedPayroll.employeeName} ({selectedPayroll.employeeCode})</p>
+                  </div>
+                  <div style={{ background: '#f0fdf4', color: '#15803d', padding: '8px 16px', borderRadius: '12px', fontWeight: 800, fontSize: '0.9rem' }}>
+                    Processed
+                  </div>
                 </div>
 
-                <button onClick={() => setShowDetailsModal(false)} className="btn-secondary" style={{ marginTop: '20px', width: '100%' }}>Close</button>
+                {selectedPayroll.detailType ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px', maxHeight: '400px', overflowY: 'auto', paddingRight: '8px' }}>
+                    {selectedPayroll.details && selectedPayroll.details.length > 0 ? (
+                      selectedPayroll.details.map((d, idx) => (
+                        <div key={idx} style={{ padding: '16px', background: '#f8fafc', borderRadius: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid #f1f5f9' }}>
+                          <span style={{ fontWeight: 700, color: '#6366f1' }}>{formatDate(d.date).split(',')[0]}</span>
+                          <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600, background: '#fff', padding: '4px 10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>{d.reason || 'N/A'}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontWeight: 600 }}>No specific records found for this category.</div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
+                      <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '20px' }}>
+                          <div style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>Earnings</div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: 600, color: '#475569' }}>Basic</span>
+                            <span style={{ fontWeight: 800 }}>₹{selectedPayroll.baseSalary?.toLocaleString()}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '12px', marginTop: '12px' }}>
+                            <span style={{ fontWeight: 700, color: '#1e293b' }}>Gross</span>
+                            <span style={{ fontWeight: 900, color: '#1e293b' }}>₹{selectedPayroll.grossEarnings?.toLocaleString()}</span>
+                          </div>
+                      </div>
+                      <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '20px' }}>
+                          <div style={{ color: '#64748b', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>Deductions</div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span style={{ fontWeight: 600, color: '#475569' }}>Prof. Tax</span>
+                            <span style={{ fontWeight: 800, color: '#ef4444' }}>₹{selectedPayroll.professionalTax}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '12px', marginTop: '12px' }}>
+                            <span style={{ fontWeight: 700, color: '#1e293b' }}>Total</span>
+                            <span style={{ fontWeight: 900, color: '#ef4444' }}>₹{selectedPayroll.professionalTax}</span>
+                          </div>
+                      </div>
+                    </div>
+
+                    <div className="card" style={{ padding: '24px', marginBottom: '32px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}>
+                      <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.9rem', fontWeight: 600, marginBottom: '4px' }}>Net Payable Amount</div>
+                      <div style={{ color: '#fff', fontSize: '2.4rem', fontWeight: 900 }}>₹{selectedPayroll.netSalary?.toLocaleString()}</div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '32px' }}>
+                      <div style={{ textAlign: 'center', padding: '16px', background: '#f8fafc', borderRadius: '16px' }}>
+                        <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, marginBottom: '4px' }}>PAID DAYS</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 900 }}>{selectedPayroll.paidDays}</div>
+                      </div>
+                      <div style={{ textAlign: 'center', padding: '16px', background: '#f8fafc', borderRadius: '16px' }}>
+                        <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, marginBottom: '4px' }}>ABSENTS</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#ef4444' }}>{selectedPayroll.absentDays}</div>
+                      </div>
+                      <div style={{ textAlign: 'center', padding: '16px', background: '#f8fafc', borderRadius: '16px' }}>
+                        <div style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, marginBottom: '4px' }}>HALF DAYS</div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#f59e0b' }}>{selectedPayroll.halfDays}</div>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <button 
+                  onClick={() => { setShowDetailsModal(false); setTimeout(() => setSelectedPayroll(null), 200); }} 
+                  className="btn-secondary" 
+                  style={{ width: '100%', padding: '16px', borderRadius: '16px', fontWeight: 700 }}
+                >
+                  Close
+                </button>
               </motion.div>
             </div>
           )}

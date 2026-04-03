@@ -33,8 +33,8 @@ const processSingleEmployeePayroll = async ({ employeeId, fromDate, toDate, targ
   const employee = await Employee.findById(employeeId);
   if (!employee) return null;
 
-  // Fix: Total days in range should be exactly the number of days between dates
-  const totalDaysInRange = Math.round((toDate - fromDate) / (1000 * 60 * 60 * 24));
+  // Fix: Total days in range should be inclusive (+1)
+  const totalDaysInRange = Math.round((toDate - fromDate) / (1000 * 60 * 60 * 24)) + 1;
 
   // ── FETCH ATTENDANCE & HOLIDAYS ──
   const [attendanceRecords, holidayRecords] = await Promise.all([
@@ -93,10 +93,14 @@ const processSingleEmployeePayroll = async ({ employeeId, fromDate, toDate, targ
 
   const paidDays = summary.present + (summary.half * 0.5) + summary.paidLeave + summary.weekOff + summary.holiday;
   const baseSalary = employee.salary || 0;
-  const dailyRate = baseSalary / 30; 
+  
+  // Use the actual days in the range as the divisor if it represents a full month cycle (>= 28 days)
+  // Otherwise, use 30 as a standard divisor for partial month calculations.
+  const divisor = totalDaysInRange >= 28 ? totalDaysInRange : 30;
+  const dailyRate = baseSalary / divisor;
   const grossEarnings = parseFloat((dailyRate * paidDays).toFixed(2));
   const professionalTax = calculatePT(grossEarnings, employee.gender, toDate.getMonth());
-  const netSalary = grossEarnings - professionalTax;
+  const netSalary = Math.max(0, grossEarnings - professionalTax);
 
   return await Payroll.findOneAndUpdate(
     { employeeId, month: targetMonth, year: targetYear },
@@ -169,9 +173,12 @@ export const generateAllPayroll = asyncHandler(async (req, res) => {
   const targetMonth = toDate.getMonth() + 1;
   const targetYear = toDate.getFullYear();
 
+  // Fetch ALL active employees
   const employees = await Employee.find({ status: 'Active' });
   
   const results = [];
+  // Use Promise.all with batching if employees > 100 to avoid overwhelming DB? 
+  // For ~50 employees, a simple loop or Promise.all is fine.
   for (const emp of employees) {
     try {
       const payroll = await processSingleEmployeePayroll({
@@ -190,40 +197,43 @@ export const generateAllPayroll = asyncHandler(async (req, res) => {
 // ─── GET PAYROLL LIST ────────────────────────────────────────────────────────
 
 export const getPayrollList = asyncHandler(async (req, res) => {
-  const { month, year, status, startDate, endDate, employeeId } = req.query;
+  const { month, year, status, startDate, endDate, employeeId, self } = req.query;
   const isManagement = ['SuperUser', 'HR', 'Director', 'VP', 'GM', 'Manager'].includes(req.user.role);
   
   let query = {};
 
-  // ── ROLE PROTECTION ──
-  if (!isManagement) {
+  // ── ROLE PROTECTION & SELF-QUERY ──
+  if (self === 'true') {
+    // Personal Portal View (Always restricted to own records)
+    query.employeeId = req.user._id;
+  } else if (!isManagement) {
+    // Non-management role (Always restricted to own records)
     query.employeeId = req.user._id;
   } else if (employeeId) {
+    // Management viewing a specific employee
     query.employeeId = employeeId;
   }
+  // Otherwise: Manager viewing all (e.g. Admin Dashboard list)
 
   if (startDate && endDate) {
+    const start = new Date(startDate);
     const end = new Date(endDate);
-    if (!isNaN(end.getTime())) {
-      query.month = end.getMonth() + 1;
-      query.year = end.getFullYear();
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+      query.fromDate = { $lte: end.setHours(23,59,59,999) };
+      query.toDate = { $gte: start.setHours(0,0,0,0) };
     }
   } else if (month && year) {
     query.month = Number(month);
     query.year = Number(year);
   }
   
-  // If still empty and manager, just show recent (don't force empty)
-  if (Object.keys(query).length === 0 && isManagement) {
-    // Show all latest payrolls
-  }
-
   if (status) query.status = status;
 
+  // INCREASE LIMIT to 1000 for management to ensure all 48+ employees are visible
   const payrolls = await Payroll.find(query)
     .populate('employeeId', 'name employeeCode department position')
     .sort({ createdAt: -1 })
-    .limit(100);
+    .limit(1000);
 
   res.status(200).json(new ApiResponse(200, payrolls, 'Payrolls fetched successfully'));
 });
