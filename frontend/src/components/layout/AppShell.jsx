@@ -12,28 +12,17 @@ import { getUnreadCount } from '../../api/announcement.api';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const navGroups = [
-  { 
+  {
     label: 'Overview',
     items: [
       { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'] },
     ]
   },
-  {
-    label: 'Communications',
-    items: [
-      { 
-        icon: Megaphone, label: 'Announcements', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'],
-        children: [
-          { label: 'My Feed', path: '/announcements', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'] },
-          { label: 'Manage Broadcasts', path: '/manage-announcements', roles: ['SuperUser', 'HR', 'Director', 'VP', 'GM', 'Manager'] },
-        ]
-      }
-    ]
-  },
+
   {
     label: 'HR Operations',
     items: [
-      { 
+      {
         icon: Clock, label: 'Attendance', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'],
         children: [
           { label: 'Attendance Page', path: '/attendance', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'] },
@@ -43,7 +32,7 @@ const navGroups = [
           { label: 'Admin Attendance', path: '/attendance/admin', roles: ['SuperUser', 'HR', 'Director'] },
         ]
       },
-      { 
+      {
         icon: CalendarDays, label: 'Leave Management', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'],
         children: [
           { label: 'My Leaves', path: '/leaves', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'] },
@@ -51,7 +40,7 @@ const navGroups = [
           { label: 'Leave Dashboard', path: '/leave-dashboard', roles: ['SuperUser', 'HR', 'Director'] },
         ]
       },
-      { 
+      {
         icon: DollarSign, label: 'Payroll', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'],
         children: [
           { label: 'My Pay Slips', path: '/payroll/my', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'] },
@@ -71,6 +60,23 @@ const navGroups = [
 
     ]
   },
+
+
+
+
+  {
+    label: 'Communications',
+    items: [
+      {
+        icon: Megaphone, label: 'Announcements', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'],
+        children: [
+          { label: 'My Feed', path: '/announcements', roles: ['SuperUser', 'HR', 'Manager', 'Director', 'VP', 'GM', 'Employee', 'Intern'] },
+          { label: 'Manage Broadcasts', path: '/manage-announcements', roles: ['SuperUser', 'HR', 'Director', 'VP', 'GM', 'Manager'] },
+        ]
+      }
+    ]
+  },
+
   {
     label: 'Account',
     items: [
@@ -99,11 +105,11 @@ const AppShell = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  
+
   // Responsive / Mobile States
   const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  
+
   // Keep track of which menu groups are expanded
   const [expandedMenus, setExpandedMenus] = useState({});
 
@@ -129,10 +135,10 @@ const AppShell = ({ children }) => {
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 10);
     const handleResize = () => setIsMobile(window.innerWidth < 1024);
-    
+
     window.addEventListener('scroll', handleScroll, { passive: true });
     window.addEventListener('resize', handleResize);
-    
+
     return () => {
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('resize', handleResize);
@@ -172,7 +178,7 @@ const AppShell = ({ children }) => {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#FAFAFA', fontFamily: "'Inter', sans-serif" }}>
-      
+
       {/* ── MOBILE BACKDROP ── */}
       <AnimatePresence>
         {isMobile && mobileMenuOpen && (
@@ -192,13 +198,13 @@ const AppShell = ({ children }) => {
         background: theme.colors.surface,
         display: 'flex', flexDirection: 'column',
         transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), width 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-        position: 'fixed', top: 0, 
-        left: isMobile ? (mobileMenuOpen ? 0 : '-280px') : 0, 
+        position: 'fixed', top: 0,
+        left: isMobile ? (mobileMenuOpen ? 0 : '-280px') : 0,
         height: '100vh', zIndex: 1100,
         borderRight: '1px solid rgba(226, 232, 240, 0.6)',
         boxShadow: '4px 0 24px rgba(0,0,0,0.02)',
       }}>
-        
+
         {/* Branding */}
         <div style={{
           height: '80px', display: 'flex', alignItems: 'center',
@@ -213,13 +219,13 @@ const AppShell = ({ children }) => {
             boxShadow: '0 8px 20px rgba(0,0,0,0.15)',
             transition: 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
           }}
-          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05) rotate(-5deg)'}
-          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1) rotate(0)'}>
+            onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05) rotate(-5deg)'}
+            onMouseLeave={e => e.currentTarget.style.transform = 'scale(1) rotate(0)'}>
             <Shield size={22} color="#fff" strokeWidth={2.5} />
           </div>
-          
-          <div style={{ 
-            opacity: isMobile || !collapsed ? 1 : 0, 
+
+          <div style={{
+            opacity: isMobile || !collapsed ? 1 : 0,
             transform: !isMobile && collapsed ? 'translateX(-10px)' : 'translateX(0)',
             transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)', whiteSpace: 'nowrap', overflow: 'hidden',
             flex: 1
@@ -233,7 +239,7 @@ const AppShell = ({ children }) => {
           </div>
 
           {isMobile && (
-            <button 
+            <button
               onClick={() => setMobileMenuOpen(false)}
               className="icon-btn"
               style={{ width: '32px', height: '32px' }}
@@ -245,7 +251,7 @@ const AppShell = ({ children }) => {
 
         {/* Navigation */}
         <nav style={{ flex: 1, padding: '16px', display: 'flex', flexDirection: 'column', gap: '20px', overflowY: 'auto' }}>
-          
+
           {navGroups.map((group, groupIndex) => {
             // Filter items in this group that the user has access to
             const visibleItems = group.items.map(item => {
@@ -260,11 +266,11 @@ const AppShell = ({ children }) => {
 
             return (
               <div key={groupIndex} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                
+
                 {/* Group Header */}
-                <div style={{ 
-                  fontSize: '0.65rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase', 
-                  letterSpacing: '0.1em', padding: '0 12px 8px 12px', opacity: collapsed ? 0 : 1, 
+                <div style={{
+                  fontSize: '0.65rem', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase',
+                  letterSpacing: '0.1em', padding: '0 12px 8px 12px', opacity: collapsed ? 0 : 1,
                   transition: 'opacity 0.2s', whiteSpace: 'nowrap', overflow: 'hidden'
                 }}>
                   {group.label}
@@ -275,15 +281,15 @@ const AppShell = ({ children }) => {
                   const Icon = item.icon;
                   const hasChildren = !!item.children;
                   const isExpanded = expandedMenus[item.label];
-                  
+
                   // Check if this item (or its children) are active
-                  const isActive = hasChildren 
+                  const isActive = hasChildren
                     ? item.children.some(child => location.pathname.startsWith(child.path))
                     : location.pathname.startsWith(item.path);
 
                   return (
                     <div key={item.label} style={{ display: 'flex', flexDirection: 'column' }}>
-                      
+
                       {/* Parent Menu Item */}
                       {hasChildren ? (
                         <div className="nav-item"
@@ -301,17 +307,17 @@ const AppShell = ({ children }) => {
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '24px', flexShrink: 0, marginLeft: '4px' }}>
                             <Icon size={20} strokeWidth={2} style={{ transition: 'transform 0.2s', transform: (isActive && !isExpanded && collapsed) ? 'scale(1.1)' : 'scale(1)' }} />
                           </div>
-                          
-                          <span style={{ 
-                            fontSize: '0.9rem', flex: 1, opacity: collapsed ? 0 : 1, 
+
+                          <span style={{
+                            fontSize: '0.9rem', flex: 1, opacity: collapsed ? 0 : 1,
                             transform: collapsed ? 'translateX(-10px)' : 'translateX(0)',
                             transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
                           }}>
                             {item.label}
                           </span>
 
-                          <div style={{ 
-                            opacity: collapsed ? 0 : 1, transition: 'all 0.2s', 
+                          <div style={{
+                            opacity: collapsed ? 0 : 1, transition: 'all 0.2s',
                             display: 'flex', alignItems: 'center', marginRight: '4px',
                             transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
                           }}>
@@ -347,9 +353,9 @@ const AppShell = ({ children }) => {
 
                       {/* Expandable Children */}
                       {hasChildren && (
-                        <div style={{ 
-                          maxHeight: (isExpanded && !collapsed) ? `${item.children.length * 50}px` : '0px', 
-                          opacity: (isExpanded && !collapsed) ? 1 : 0, overflow: 'hidden', 
+                        <div style={{
+                          maxHeight: (isExpanded && !collapsed) ? `${item.children.length * 50}px` : '0px',
+                          opacity: (isExpanded && !collapsed) ? 1 : 0, overflow: 'hidden',
                           transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                           display: 'flex', flexDirection: 'column', gap: '2px',
                           marginLeft: '26px', marginTop: (isExpanded && !collapsed) ? '4px' : '0',
@@ -406,11 +412,11 @@ const AppShell = ({ children }) => {
                 <User size={20} color="#4F46E5" strokeWidth={2.5} />
               )}
             </div>
-            
-            <div style={{ 
-              flex: 1, overflow: 'hidden', opacity: collapsed ? 0 : 1, 
+
+            <div style={{
+              flex: 1, overflow: 'hidden', opacity: collapsed ? 0 : 1,
               width: collapsed ? 0 : 'auto', transition: 'all 0.3s ease'
-           }}>
+            }}>
               <div style={{ color: '#111827', fontWeight: 700, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {user?.name}
               </div>
@@ -418,9 +424,9 @@ const AppShell = ({ children }) => {
                 {user?.employeeCode}
               </div>
             </div>
-            
+
             {!collapsed && (
-              <button 
+              <button
                 onClick={handleLogout}
                 className="logout-btn"
                 style={{
@@ -434,7 +440,7 @@ const AppShell = ({ children }) => {
               </button>
             )}
           </div>
-          
+
           {collapsed && (
             <div style={{ marginTop: '16px', textAlign: 'center' }}>
               <button onClick={handleLogout} style={{ background: 'none', border: 'none', color: '#EF4444', cursor: 'pointer' }}>
@@ -464,13 +470,13 @@ const AppShell = ({ children }) => {
       </aside>
 
       {/* ── MAIN CONTENT ── */}
-      <div style={{ 
-        flex: 1, 
-        marginLeft: isMobile ? 0 : `${sidebarWidth}px`, 
-        display: 'flex', flexDirection: 'column', 
+      <div style={{
+        flex: 1,
+        marginLeft: isMobile ? 0 : `${sidebarWidth}px`,
+        display: 'flex', flexDirection: 'column',
         transition: 'margin-left 0.4s cubic-bezier(0.16, 1, 0.3, 1)', minWidth: 0, position: 'relative'
       }}>
-        
+
         {/* Top Header - Glassmorphism */}
         <header style={{
           height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -487,18 +493,18 @@ const AppShell = ({ children }) => {
                 <Menu size={20} color="#111827" />
               </button>
             )}
-            
+
             {!isMobile && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '12px', background: '#F1F5F9',
                 padding: '10px 16px', borderRadius: '12px', color: '#64748B', fontSize: '0.9rem',
                 border: '1px solid #E2E8F0'
               }}>
-                 <Search size={18} />
-                 <input 
-                   type="text" placeholder="Quick search..." 
-                   style={{ border: 'none', background: 'transparent', outline: 'none', width: '200px', fontSize: '0.9rem', color: '#111827' }} 
-                 />
+                <Search size={18} />
+                <input
+                  type="text" placeholder="Quick search..."
+                  style={{ border: 'none', background: 'transparent', outline: 'none', width: '200px', fontSize: '0.9rem', color: '#111827' }}
+                />
               </div>
             )}
           </div>
@@ -506,7 +512,7 @@ const AppShell = ({ children }) => {
           {/* User & Actions Right */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button 
+              <button
                 onClick={() => navigate('/announcements')}
                 title="Announcements"
                 className="icon-btn" style={{ position: 'relative' }}
@@ -518,7 +524,7 @@ const AppShell = ({ children }) => {
               </button>
               <button className="icon-btn"><Settings size={20} strokeWidth={2} /></button>
             </div>
-            
+
             <div style={{ width: '1px', height: '24px', background: '#E2E8F0' }} />
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', cursor: 'pointer' }} onClick={() => navigate('/profile')}>
@@ -532,12 +538,12 @@ const AppShell = ({ children }) => {
                 border: '2px solid #fff', boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
                 transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
               }}
-              onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
-              onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
+                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.08)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}>
                 {user?.profileImageUrl ? (
                   <img src={user.profileImageUrl} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                   <User size={22} color="#4F46E5" strokeWidth={2.5} />
+                  <User size={22} color="#4F46E5" strokeWidth={2.5} />
                 )}
               </div>
             </div>
